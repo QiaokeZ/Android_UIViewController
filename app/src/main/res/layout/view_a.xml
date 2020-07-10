@@ -48,11 +48,6 @@
             android:layout_height="wrap_content"
             android:text="自定义转场动画1" />
 
-        <RadioButton
-            android:id="@+id/radioButton3"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="自定义转场动画2" />
     </RadioGroup>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
