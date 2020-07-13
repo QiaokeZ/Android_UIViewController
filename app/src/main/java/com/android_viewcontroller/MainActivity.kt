@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.MotionEvent
 import android.view.VelocityTracker
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.android_viewcontroller.core.*
 
@@ -198,89 +199,120 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
 
         private var downX = 0f
         private var disX = 0f
-        private var velocityTracker: VelocityTracker? = null
         private val down_max_x = 100f
         private val velocity = 1500
+        private val initialScale = .95F
+        private var velocityTracker: VelocityTracker? = null
 
         override fun animateTransition(context: TransitioningContext) {
-            val fromView =
-                context.getContentView(TransitioningContext.ViewKey.from)
+            val fromView = context.getContentView(TransitioningContext.ViewKey.from)
             val toView = context.getContentView(TransitioningContext.ViewKey.to)
             val event = context.event
             if (fromView == null || toView == null || event == null) return
-            val initialScale = .95F
+
+            val index = event.actionIndex
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    velocityTracker = VelocityTracker.obtain()
-                    downX = event.x
+                    dispatchActionDown(event);
                 }
-                MotionEvent.ACTION_MOVE -> if (downX < down_max_x) {
-                    velocityTracker?.let {
-                        it.addMovement(event)
-                        it.computeCurrentVelocity(velocity)
+                MotionEvent.ACTION_MOVE -> {
+                    if (event.getPointerId(index) == 0) {
+                        dispatchActionMove(event, fromView, toView, context)
                     }
-                    disX = event.x - downX
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                    dispatchActionUpAndCancel(event, fromView, toView, context)
+                }
+            }
+        }
+
+        private fun dispatchActionDown(event: MotionEvent) {
+            velocityTracker = VelocityTracker.obtain()
+            downX = event.x
+        }
+
+        private fun dispatchActionMove(
+            event: MotionEvent,
+            fromView: View,
+            toView: View,
+            context: TransitioningContext
+        ) {
+            if (downX < down_max_x) {
+                velocityTracker?.let {
+                    it.addMovement(event)
+                    it.computeCurrentVelocity(velocity)
+                }
+                disX = event.x - downX
+                if (disX >= 0) {
                     context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear)
                     fromView.x = disX
                     context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear)
                     toView.scaleX = (initialScale + 0.05 * (disX / toView.width)).toFloat()
                     toView.scaleY = toView.scaleX
+                } else {
+                    disX = 0f
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (downX != event.x && downX < down_max_x) {
-                        val propertyName = "translationX"
-                        val animatorSet = AnimatorSet()
-                        animatorSet.duration = context.defaultTransitionDuration / 2
-                        if (disX > context.containerView.width / 2 || velocityTracker!!.xVelocity > velocity) {
-                            val fromViewAnimator = ObjectAnimator.ofFloat(
-                                fromView,
-                                propertyName,
-                                disX,
-                                fromView.width.toFloat()
-                            )
-                            fromViewAnimator.addListener(object : AnimatorListenerAdapter() {
-                                override fun onAnimationEnd(animation: Animator) {
-                                    super.onAnimationEnd(animation)
-                                    context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear)
-                                }
-                            })
-                            val toViewAnimator = ObjectAnimator.ofPropertyValuesHolder(
-                                toView,
-                                PropertyValuesHolder.ofFloat("scaleX", toView.scaleX, 1F),
-                                PropertyValuesHolder.ofFloat("scaleY", toView.scaleY, 1F)
-                            )
-                            toViewAnimator.addListener(object : AnimatorListenerAdapter() {
-                                override fun onAnimationEnd(animation: Animator) {
-                                    super.onAnimationEnd(animation)
-                                    context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear)
-                                    context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish)
-                                }
-                            })
-                            animatorSet.playTogether(fromViewAnimator)
-                            animatorSet.playTogether(toViewAnimator)
-                        } else {
-                            val fromViewAnimator =
-                                ObjectAnimator.ofFloat(fromView, propertyName, disX, 0f)
-                            val toViewAnimator = ObjectAnimator.ofPropertyValuesHolder(
-                                toView,
-                                PropertyValuesHolder.ofFloat("scaleX", toView.scaleX, .95F),
-                                PropertyValuesHolder.ofFloat("scaleY", toView.scaleY, .95F)
-                            )
-                            toViewAnimator.addListener(object : AnimatorListenerAdapter() {
-                                override fun onAnimationEnd(animation: Animator) {
-                                    super.onAnimationEnd(animation)
-                                    context.updateTransitionState(TransitioningContext.TransitionState.transitionCancel)
-                                }
-                            })
-                            animatorSet.playTogether(fromViewAnimator)
-                            animatorSet.playTogether(toViewAnimator)
-                        }
-                        animatorSet.start()
-                        downX = 0f
-                        disX = downX
-                        velocityTracker?.clear()
-                        velocityTracker?.recycle()
+            }
+        }
+
+        private fun dispatchActionUpAndCancel(
+            event: MotionEvent,
+            fromView: View,
+            toView: View,
+            context: TransitioningContext
+        ) {
+            if (velocityTracker != null) {
+                if (downX != event.x && downX < down_max_x) {
+                    val propertyName = "translationX"
+                    val animatorSet = AnimatorSet()
+                    animatorSet.duration = context.defaultTransitionDuration / 2
+                    if (disX > context.containerView.width / 2 || velocityTracker!!.xVelocity > velocity) {
+                        val fromViewAnimator = ObjectAnimator.ofFloat(
+                            fromView,
+                            propertyName,
+                            disX,
+                            fromView.width.toFloat()
+                        )
+                        fromViewAnimator.addListener(object : AnimatorListenerAdapter() {
+                            override fun onAnimationEnd(animation: Animator) {
+                                super.onAnimationEnd(animation)
+                                context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear)
+                            }
+                        })
+                        val toViewAnimator = ObjectAnimator.ofPropertyValuesHolder(
+                            toView,
+                            PropertyValuesHolder.ofFloat("scaleX", toView.scaleX, 1F),
+                            PropertyValuesHolder.ofFloat("scaleY", toView.scaleY, 1F)
+                        )
+                        toViewAnimator.addListener(object : AnimatorListenerAdapter() {
+                            override fun onAnimationEnd(animation: Animator) {
+                                super.onAnimationEnd(animation)
+                                context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear)
+                                context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish)
+                            }
+                        })
+                        animatorSet.playTogether(fromViewAnimator)
+                        animatorSet.playTogether(toViewAnimator)
+                    } else {
+                        val fromViewAnimator =
+                            ObjectAnimator.ofFloat(fromView, propertyName, disX, 0f)
+                        val toViewAnimator = ObjectAnimator.ofPropertyValuesHolder(
+                            toView,
+                            PropertyValuesHolder.ofFloat("scaleX", toView.scaleX, initialScale),
+                            PropertyValuesHolder.ofFloat("scaleY", toView.scaleY, initialScale)
+                        )
+                        toViewAnimator.addListener(object : AnimatorListenerAdapter() {
+                            override fun onAnimationEnd(animation: Animator) {
+                                super.onAnimationEnd(animation)
+                                context.updateTransitionState(TransitioningContext.TransitionState.transitionCancel)
+                            }
+                        })
+                        animatorSet.playTogether(fromViewAnimator)
+                        animatorSet.playTogether(toViewAnimator)
                     }
+                    animatorSet.start()
+                    velocityTracker?.recycle()
+                    velocityTracker = null
                 }
             }
         }

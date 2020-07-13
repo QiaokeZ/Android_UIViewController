@@ -16,7 +16,7 @@ import java.util.List;
 
 public class NavigationController extends ViewController {
 
-    private int TRANSITIONING_STATE = 0;
+    private int transitioningStateFlags = 0;
     private NavigationControllerDelegate delegate;
     private AnimatedTransitioning popGestureTransitioning;
 
@@ -109,15 +109,15 @@ public class NavigationController extends ViewController {
 
     private int setTransitioningState(int mask, boolean t) {
         if (t) {
-            TRANSITIONING_STATE |= (1 << mask);
+            transitioningStateFlags |= (1 << mask);
         } else {
-            TRANSITIONING_STATE &= ~(1 << mask);
+            transitioningStateFlags &= ~(1 << mask);
         }
-        return TRANSITIONING_STATE;
+        return transitioningStateFlags;
     }
 
     private boolean getTransitioningState(int mask) {
-        return 0 != (TRANSITIONING_STATE & (1 << mask));
+        return 0 != (transitioningStateFlags & (1 << mask));
     }
 
     private void dispatchTransitionState(TransitioningContext.TransitionState state, TransitioningContext.Operation operation, ViewController from, ViewController to) {
@@ -162,19 +162,24 @@ public class NavigationController extends ViewController {
             case transitionCancel:
                 popGestureTransitioning = null;
                 to.contentView.setVisibility(View.INVISIBLE);
-                setTransitioningState(1, false);
-                setTransitioningState(2, false);
-                setTransitioningState(3, false);
-                setTransitioningState(4, false);
+                to._notifyViewWillDisappear();
+                to._notifyViewDidDisappear();
+                from._notifyViewWillAppear();
+                from._notifyViewDidAppear();
+                resetTransitioningState();
                 break;
             case transitionFinish:
                 popGestureTransitioning = null;
-                setTransitioningState(1, false);
-                setTransitioningState(2, false);
-                setTransitioningState(3, false);
-                setTransitioningState(4, false);
+                resetTransitioningState();
                 break;
         }
+    }
+
+    private void resetTransitioningState() {
+        setTransitioningState(1, false);
+        setTransitioningState(2, false);
+        setTransitioningState(3, false);
+        setTransitioningState(4, false);
     }
 
     @Override
@@ -368,70 +373,91 @@ public class NavigationController extends ViewController {
                 View fromView = context.getContentView(TransitioningContext.ViewKey.from);
                 View toView = context.getContentView(TransitioningContext.ViewKey.to);
                 MotionEvent event = context.getEvent();
-                if (fromView == null || toView == null || event == null) return;
-                float initialX = context.getContainerView().getWidth() / 4;
-                switch (event.getAction()) {
-                    case MotionEvent.ACTION_DOWN:
-                        velocityTracker = VelocityTracker.obtain();
-                        downX = event.getX();
-                        break;
-                    case MotionEvent.ACTION_MOVE:
-                        if (downX < down_max_x) {
-                            velocityTracker.addMovement(event);
-                            velocityTracker.computeCurrentVelocity(velocity);
-                            disX = event.getX() - downX;
-                            context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear);
-                            fromView.setX(disX);
-                            context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear);
-                            toView.setX(-initialX + initialX * (disX / toView.getWidth()));
-                        }
-                        break;
-                    case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL:
-                        if (downX != event.getX() && downX < down_max_x) {
-                            String propertyName = "translationX";
-                            AnimatorSet animatorSet = new AnimatorSet();
-                            animatorSet.setDuration(context.getDefaultTransitionDuration() / 2);
-                            if (disX > context.getContainerView().getWidth() / 2 || velocityTracker.getXVelocity() > velocity) {
-                                ObjectAnimator fromViewAnimator = ObjectAnimator.ofFloat(fromView, propertyName, disX, fromView.getWidth());
-                                fromViewAnimator.addListener(new AnimatorListenerAdapter() {
-                                    @Override
-                                    public void onAnimationEnd(Animator animation) {
-                                        super.onAnimationEnd(animation);
-                                        context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear);
-                                    }
-                                });
-                                ObjectAnimator toViewAnimator = ObjectAnimator.ofFloat(toView, propertyName, toView.getX(), 0);
-                                toViewAnimator.addListener(new AnimatorListenerAdapter() {
-                                    @Override
-                                    public void onAnimationEnd(Animator animation) {
-                                        super.onAnimationEnd(animation);
-                                        context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear);
-                                        context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish);
-                                    }
-                                });
-                                animatorSet.playTogether(fromViewAnimator);
-                                animatorSet.playTogether(toViewAnimator);
-                            } else {
-                                ObjectAnimator fromViewAnimator = ObjectAnimator.ofFloat(fromView, propertyName, disX, 0);
-                                ObjectAnimator toViewAnimator = ObjectAnimator.ofFloat(toView, propertyName, toView.getX(), -initialX);
-                                toViewAnimator.addListener(new AnimatorListenerAdapter() {
-                                    @Override
-                                    public void onAnimationEnd(Animator animation) {
-                                        super.onAnimationEnd(animation);
-                                        context.updateTransitionState(TransitioningContext.TransitionState.transitionCancel);
-                                    }
-                                });
-                                animatorSet.playTogether(fromViewAnimator);
-                                animatorSet.playTogether(toViewAnimator);
+                if (fromView != null && toView != null && event != null) {
+                    final float initialX = context.getContainerView().getWidth() / 4;
+                    int index = event.getActionIndex();
+                    switch (event.getAction()) {
+                        case MotionEvent.ACTION_DOWN:
+                            dispatchActionDown(event);
+                            break;
+                        case MotionEvent.ACTION_MOVE:
+                            if (event.getPointerId(index) == 0) {
+                                dispatchActionMove(event, fromView, toView, context, initialX);
                             }
-                            animatorSet.start();
+                            break;
+                        case MotionEvent.ACTION_UP:
+                        case MotionEvent.ACTION_CANCEL:
+                        case MotionEvent.ACTION_POINTER_UP:
+                            dispatchActionUpAndCancel(event, fromView, toView, context, initialX);
+                            break;
+                    }
+                }
+            }
+
+            private void dispatchActionDown(MotionEvent event) {
+                velocityTracker = VelocityTracker.obtain();
+                downX = event.getX();
+            }
+
+            private void dispatchActionMove(MotionEvent event, View fromView, View toView, TransitioningContext context, float initialX) {
+                if (downX < down_max_x && velocityTracker != null) {
+                    velocityTracker.addMovement(event);
+                    velocityTracker.computeCurrentVelocity(velocity);
+                    disX = event.getX() - downX;
+                    if (disX >= 0) {
+                        context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear);
+                        fromView.setX(disX);
+                        context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear);
+                        toView.setX(-initialX + initialX * (disX / toView.getWidth()));
+                    } else {
+                        disX = 0;
+                    }
+                }
+            }
+
+            private void dispatchActionUpAndCancel(MotionEvent event, View fromView, View toView, TransitioningContext context, float initialX) {
+                if (velocityTracker != null) {
+                    if (downX != event.getX() && downX < down_max_x) {
+                        String propertyName = "translationX";
+                        AnimatorSet animatorSet = new AnimatorSet();
+                        animatorSet.setDuration(context.getDefaultTransitionDuration() / 2);
+                        if (disX > context.getContainerView().getWidth() / 2 || velocityTracker.getXVelocity() > velocity) {
+                            ObjectAnimator fromViewAnimator = ObjectAnimator.ofFloat(fromView, propertyName, disX, fromView.getWidth());
+                            fromViewAnimator.addListener(new AnimatorListenerAdapter() {
+                                @Override
+                                public void onAnimationEnd(Animator animation) {
+                                    super.onAnimationEnd(animation);
+                                    context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear);
+                                }
+                            });
+                            ObjectAnimator toViewAnimator = ObjectAnimator.ofFloat(toView, propertyName, toView.getX(), 0);
+                            toViewAnimator.addListener(new AnimatorListenerAdapter() {
+                                @Override
+                                public void onAnimationEnd(Animator animation) {
+                                    super.onAnimationEnd(animation);
+                                    context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear);
+                                    context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish);
+                                }
+                            });
+                            animatorSet.playTogether(fromViewAnimator);
+                            animatorSet.playTogether(toViewAnimator);
+                        } else {
+                            ObjectAnimator fromViewAnimator = ObjectAnimator.ofFloat(fromView, propertyName, disX, 0);
+                            ObjectAnimator toViewAnimator = ObjectAnimator.ofFloat(toView, propertyName, toView.getX(), -initialX);
+                            toViewAnimator.addListener(new AnimatorListenerAdapter() {
+                                @Override
+                                public void onAnimationEnd(Animator animation) {
+                                    super.onAnimationEnd(animation);
+                                    context.updateTransitionState(TransitioningContext.TransitionState.transitionCancel);
+                                }
+                            });
+                            animatorSet.playTogether(fromViewAnimator);
+                            animatorSet.playTogether(toViewAnimator);
                         }
-                        downX = 0;
-                        disX = downX;
-                        velocityTracker.clear();
-                        velocityTracker.recycle();
-                        break;
+                        animatorSet.start();
+                    }
+                    velocityTracker.recycle();
+                    velocityTracker = null;
                 }
             }
         }

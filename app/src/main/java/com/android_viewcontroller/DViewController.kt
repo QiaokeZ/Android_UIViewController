@@ -1,6 +1,7 @@
 package com.android_viewcontroller
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.view.LayoutInflater
 import android.view.View
 import com.android_viewcontroller.core.ViewController
