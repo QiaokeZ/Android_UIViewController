@@ -394,6 +394,8 @@ public class NavigationController extends ViewController {
                 }
             }
 
+
+
             private void dispatchActionDown(MotionEvent event) {
                 velocityTracker = VelocityTracker.obtain();
                 downX = event.getX();

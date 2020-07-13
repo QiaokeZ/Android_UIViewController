@@ -16,6 +16,8 @@ class AViewController(context: Context) : ViewController(context) {
         return LayoutInflater.from(context).inflate(R.layout.view_a, null)
     }
 
+
+
     override fun viewDidLoad() {
         super.viewDidLoad()
         contentView.button.setOnClickListener {
