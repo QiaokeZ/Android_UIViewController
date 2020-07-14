@@ -1,12 +1,8 @@
 package com.android_viewcontroller
 
-import android.animation.*
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
-import android.view.animation.Animation
-import android.view.animation.ScaleAnimation
-import android.widget.RadioButton
 import com.android_viewcontroller.core.*
 import kotlinx.android.synthetic.main.view_a.view.*
 
