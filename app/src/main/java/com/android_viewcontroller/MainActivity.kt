@@ -209,7 +209,6 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
             val toView = context.getContentView(TransitioningContext.ViewKey.to)
             val event = context.event
             if (fromView == null || toView == null || event == null) return
-
             val index = event.actionIndex
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -220,7 +219,7 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
                         dispatchActionMove(event, fromView, toView, context)
                     }
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_UP -> {
                     dispatchActionUpAndCancel(event, fromView, toView, context)
                 }
             }
@@ -237,11 +236,9 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
             toView: View,
             context: TransitioningContext
         ) {
-            if (downX < down_max_x) {
-                velocityTracker?.let {
-                    it.addMovement(event)
-                    it.computeCurrentVelocity(velocity)
-                }
+            if (downX < down_max_x && velocityTracker != null) {
+                velocityTracker?.addMovement(event)
+                velocityTracker?.computeCurrentVelocity(velocity)
                 disX = event.x - downX
                 if (disX >= 0) {
                     context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear)
