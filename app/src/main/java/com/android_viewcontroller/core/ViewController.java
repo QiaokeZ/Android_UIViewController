@@ -5,6 +5,8 @@ import android.graphics.Color;
 import android.view.View;
 import android.widget.FrameLayout;
 
+import com.android_viewcontroller.core.protocol.ViewControllerLifecycleCallbacks;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,6 +19,7 @@ public class ViewController {
     protected View contentView;
     protected ViewController parent;
     protected ViewController visible;
+    protected int transitioningStateFlags = 0;
     private boolean isViewLoaded;
 //    private boolean popGestureEnabled = true;
 
@@ -55,6 +58,19 @@ public class ViewController {
 
     public void setLifecycleCallbacks(ViewControllerLifecycleCallbacks callbacks) {
         this.callbacks = callbacks;
+    }
+
+    protected int setTransitioningState(int mask, boolean t) {
+        if (t) {
+            transitioningStateFlags |= (1 << mask);
+        } else {
+            transitioningStateFlags &= ~(1 << mask);
+        }
+        return transitioningStateFlags;
+    }
+
+    protected boolean getTransitioningState(int mask) {
+        return 0 != (transitioningStateFlags & (1 << mask));
     }
 
     public boolean isViewLoaded() {

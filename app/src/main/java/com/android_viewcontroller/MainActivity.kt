@@ -8,6 +8,7 @@ import android.view.VelocityTracker
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.android_viewcontroller.core.*
+import com.android_viewcontroller.core.protocol.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,13 +26,14 @@ class MainActivity : AppCompatActivity() {
             it?.let {
                 when (it) {
                     1 -> {
-                        navigationController.delegate = null
+                        navigationController.navigationAnimatedTransitioning = null
+                        navigationController.navigationPopGestureTransitioning = null
                     }
                     2 -> {
-                        navigationController.delegate = MyNavigationControllerDelegate1()
-                    }
-                    3 -> {
-
+                        navigationController.navigationAnimatedTransitioning =
+                            ScaleAnimatedTransitioning()
+                        navigationController.navigationPopGestureTransitioning =
+                            ScalePopGestureAnimatedTransitioning()
                     }
                 }
             }
@@ -48,67 +50,56 @@ class MainActivity : AppCompatActivity() {
 }
 
 class MyViewControllerLifecycleCallbacks : ViewControllerLifecycleCallbacks {
-    override fun viewDidAppear(viewController: ViewController?) {
-        Log.e(viewController?.javaClass?.name, "- viewDidAppear")
+
+    override fun viewDidAppear(viewController: ViewController) {
+        Log.e(viewController.javaClass?.name, "- viewDidAppear")
     }
 
-    override fun viewWillAppear(viewController: ViewController?) {
-        Log.e(viewController?.javaClass?.name, "- viewWillAppear")
+    override fun viewWillAppear(viewController: ViewController) {
+        Log.e(viewController.javaClass?.name, "- viewWillAppear")
     }
 
-    override fun loadView(viewController: ViewController?) {
-        Log.e(viewController?.javaClass?.name, "- loadView")
+    override fun loadView(viewController: ViewController) {
+        Log.e(viewController.javaClass?.name, "- loadView")
     }
 
-    override fun viewWillDisappear(viewController: ViewController?) {
-        Log.e(viewController?.javaClass?.name, "- viewWillDisappear")
+    override fun viewWillDisappear(viewController: ViewController) {
+        Log.e(viewController.javaClass?.name, "- viewWillDisappear")
     }
 
-    override fun viewDidLoad(viewController: ViewController?) {
-        Log.e(viewController?.javaClass?.name, "- viewDidLoad")
+    override fun viewDidLoad(viewController: ViewController) {
+        Log.e(viewController.javaClass?.name, "- viewDidLoad")
     }
 
-    override fun viewDidDisappear(viewController: ViewController?) {
-        Log.e(viewController?.javaClass?.name, "- viewDidDisappear")
+    override fun viewDidDisappear(viewController: ViewController) {
+        Log.e(viewController.javaClass?.name, "- viewDidDisappear")
     }
 }
 
-class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
+class ScaleAnimatedTransitioning : NavigationAnimatedTransitioning {
 
     override fun transitioning(
-        navigationController: NavigationController?,
-        operation: TransitioningContext.Operation?,
-        from: ViewController?,
-        to: ViewController?
-    ): AnimatedTransitioning? = ScaleAnimatedTransition()
-
-    override fun shouldPopGestureTransition(
-        navigationController: NavigationController?,
-        from: ViewController?,
-        to: ViewController?
-    ): Boolean = true
-
-    override fun popGestureTransitioning(
-        navigationController: NavigationController?,
-        from: ViewController?,
-        to: ViewController?
+        navigationController: NavigationController,
+        operation: NavigationController.Operation,
+        from: ViewController,
+        to: ViewController
     ): AnimatedTransitioning? {
-        return ScalePopGestureTransition()
+        return ScaleAnimatedTransition()
     }
 
     class ScaleAnimatedTransition : AnimatedTransitioning {
 
-        override fun animateTransition(context: TransitioningContext?) {
-            if (context?.operation == TransitioningContext.Operation.push) {
+        override fun animateTransition(context: AnimatedTransitionContext) {
+            if (context?.operation == NavigationController.Operation.PUSH) {
                 push(context)
-            } else if (context?.operation == TransitioningContext.Operation.pop) {
+            } else if (context?.operation == NavigationController.Operation.POP) {
                 pop(context)
             }
         }
 
-        private fun push(context: TransitioningContext) {
-            val fromView = context?.getContentView(TransitioningContext.ViewKey.from)
-            val toView = context?.getContentView(TransitioningContext.ViewKey.to)
+        private fun push(context: AnimatedTransitionContext) {
+            val fromView = context?.getContentView(BaseTransitioningContext.ViewKey.FROM)
+            val toView = context?.getContentView(BaseTransitioningContext.ViewKey.TO)
             val animatorSet = AnimatorSet()
             animatorSet.duration = context?.defaultTransitionDuration
             fromView?.let {
@@ -121,12 +112,12 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
                 animator.addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationStart(animation: Animator) {
                         super.onAnimationStart(animation)
-                        context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewWillDisappear)
                     }
 
                     override fun onAnimationEnd(animation: Animator) {
                         super.onAnimationEnd(animation)
-                        context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewDidDisappear)
                     }
                 })
             }
@@ -137,22 +128,22 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
                 animator.addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationStart(animation: Animator) {
                         super.onAnimationStart(animation)
-                        context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewWillAppear)
                     }
 
                     override fun onAnimationEnd(animation: Animator) {
                         super.onAnimationEnd(animation)
-                        context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear)
-                        context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewDidAppear)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.finish)
                     }
                 })
             }
             animatorSet.start()
         }
 
-        private fun pop(context: TransitioningContext) {
-            val fromView = context?.getContentView(TransitioningContext.ViewKey.from)
-            val toView = context?.getContentView(TransitioningContext.ViewKey.to)
+        private fun pop(context: AnimatedTransitionContext) {
+            val fromView = context?.getContentView(BaseTransitioningContext.ViewKey.FROM)
+            val toView = context?.getContentView(BaseTransitioningContext.ViewKey.TO)
             val animatorSet = AnimatorSet()
             animatorSet.duration = context?.defaultTransitionDuration
             fromView?.let {
@@ -162,12 +153,12 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
                 animator.addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationStart(animation: Animator) {
                         super.onAnimationStart(animation)
-                        context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewWillDisappear)
                     }
 
                     override fun onAnimationEnd(animation: Animator) {
                         super.onAnimationEnd(animation)
-                        context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewDidDisappear)
                     }
                 })
             }
@@ -181,21 +172,32 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
                 animator.addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationStart(animation: Animator) {
                         super.onAnimationStart(animation)
-                        context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewWillAppear)
                     }
 
                     override fun onAnimationEnd(animation: Animator) {
                         super.onAnimationEnd(animation)
-                        context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear)
-                        context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewDidAppear)
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.finish)
                     }
                 })
             }
             animatorSet.start()
         }
     }
+}
 
-    class ScalePopGestureTransition : AnimatedTransitioning {
+class ScalePopGestureAnimatedTransitioning : NavigationPopGestureTransitioning {
+
+    override fun transitioning(
+        navigationController: NavigationController,
+        from: ViewController,
+        to: ViewController
+    ): PopGestureTransitioning? {
+        return ScalePopGestureAnimatedTransition()
+    }
+
+    class ScalePopGestureAnimatedTransition : PopGestureTransitioning {
 
         private var downX = 0f
         private var disX = 0f
@@ -204,9 +206,9 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
         private val initialScale = .95F
         private var velocityTracker: VelocityTracker? = null
 
-        override fun animateTransition(context: TransitioningContext) {
-            val fromView = context.getContentView(TransitioningContext.ViewKey.from)
-            val toView = context.getContentView(TransitioningContext.ViewKey.to)
+        override fun transition(context: PopGestureTransitionContext) {
+            val fromView = context.getContentView(BaseTransitioningContext.ViewKey.FROM)
+            val toView = context.getContentView(BaseTransitioningContext.ViewKey.TO)
             val event = context.event
             if (fromView == null || toView == null || event == null) return
             val index = event.actionIndex
@@ -234,16 +236,16 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
             event: MotionEvent,
             fromView: View,
             toView: View,
-            context: TransitioningContext
+            context: PopGestureTransitionContext
         ) {
             if (downX < down_max_x && velocityTracker != null) {
                 velocityTracker?.addMovement(event)
                 velocityTracker?.computeCurrentVelocity(velocity)
                 disX = event.x - downX
                 if (disX >= 0) {
-                    context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear)
+                    context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewWillDisappear)
                     fromView.x = disX
-                    context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear)
+                    context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewWillAppear)
                     toView.scaleX = (initialScale + 0.05 * (disX / toView.width)).toFloat()
                     toView.scaleY = toView.scaleX
                 } else {
@@ -256,7 +258,7 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
             event: MotionEvent,
             fromView: View,
             toView: View,
-            context: TransitioningContext
+            context: PopGestureTransitionContext
         ) {
             if (velocityTracker != null) {
                 if (downX != event.x && downX < down_max_x) {
@@ -273,7 +275,7 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
                         fromViewAnimator.addListener(object : AnimatorListenerAdapter() {
                             override fun onAnimationEnd(animation: Animator) {
                                 super.onAnimationEnd(animation)
-                                context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear)
+                                context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewDidDisappear)
                             }
                         })
                         val toViewAnimator = ObjectAnimator.ofPropertyValuesHolder(
@@ -284,8 +286,8 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
                         toViewAnimator.addListener(object : AnimatorListenerAdapter() {
                             override fun onAnimationEnd(animation: Animator) {
                                 super.onAnimationEnd(animation)
-                                context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear)
-                                context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish)
+                                context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewDidAppear)
+                                context.updateTransitionState(BaseTransitioningContext.TransitionState.finish)
                             }
                         })
                         animatorSet.playTogether(fromViewAnimator)
@@ -301,7 +303,7 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
                         toViewAnimator.addListener(object : AnimatorListenerAdapter() {
                             override fun onAnimationEnd(animation: Animator) {
                                 super.onAnimationEnd(animation)
-                                context.updateTransitionState(TransitioningContext.TransitionState.transitionCancel)
+                                context.updateTransitionState(BaseTransitioningContext.TransitionState.cancel)
                             }
                         })
                         animatorSet.playTogether(fromViewAnimator)
@@ -315,3 +317,4 @@ class MyNavigationControllerDelegate1 : NavigationControllerDelegate {
         }
     }
 }
+

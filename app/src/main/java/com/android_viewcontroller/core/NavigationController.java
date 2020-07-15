@@ -11,14 +11,24 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 
+import com.android_viewcontroller.core.protocol.AnimatedTransitioning;
+import com.android_viewcontroller.core.protocol.NavigationAnimatedTransitioning;
+import com.android_viewcontroller.core.protocol.NavigationPopGestureTransitioning;
+import com.android_viewcontroller.core.protocol.PopGestureTransitioning;
+
 import java.util.ArrayList;
 import java.util.List;
 
 public class NavigationController extends ViewController {
 
-    private int transitioningStateFlags = 0;
-    private NavigationControllerDelegate delegate;
-    private AnimatedTransitioning popGestureTransitioning;
+    public enum Operation {
+        NONE, PUSH, POP
+    }
+
+    private NavigationAnimatedTransitioning navigationAnimatedTransitioning;
+    private NavigationPopGestureTransitioning navigationPopGestureTransitioning;
+    private PopGestureTransitioning popGestureTransitioning;
+    private boolean popGestureEnabled = true;
 
     public NavigationController(Context context, ViewController root) {
         super(context);
@@ -40,7 +50,7 @@ public class NavigationController extends ViewController {
         children.add(controller);
         controller.contentView.post(() -> {
             controller._notifyViewDidLoad();
-            showController(TransitioningContext.Operation.push, visible, controller);
+            showController(Operation.PUSH, visible, controller);
         });
     }
 
@@ -74,16 +84,32 @@ public class NavigationController extends ViewController {
                 }
             }
         }
-        showController(TransitioningContext.Operation.pop, visible, to);
+        showController(Operation.POP, visible, to);
         return controllers;
     }
 
-    public void setDelegate(NavigationControllerDelegate delegate) {
-        this.delegate = delegate;
+    public boolean isPopGestureEnabled() {
+        return popGestureEnabled;
     }
 
-    public NavigationControllerDelegate getDelegate() {
-        return delegate;
+    public void setPopGestureEnabled(boolean popGestureEnabled) {
+        this.popGestureEnabled = popGestureEnabled;
+    }
+
+    public NavigationAnimatedTransitioning getNavigationAnimatedTransitioning() {
+        return navigationAnimatedTransitioning;
+    }
+
+    public void setNavigationAnimatedTransitioning(NavigationAnimatedTransitioning navigationAnimatedTransitioning) {
+        this.navigationAnimatedTransitioning = navigationAnimatedTransitioning;
+    }
+
+    public NavigationPopGestureTransitioning getNavigationPopGestureTransitioning() {
+        return navigationPopGestureTransitioning;
+    }
+
+    public void setNavigationPopGestureTransitioning(NavigationPopGestureTransitioning navigationPopGestureTransitioning) {
+        this.navigationPopGestureTransitioning = navigationPopGestureTransitioning;
     }
 
     private void checkContainerView() {
@@ -107,20 +133,7 @@ public class NavigationController extends ViewController {
         return true;
     }
 
-    private int setTransitioningState(int mask, boolean t) {
-        if (t) {
-            transitioningStateFlags |= (1 << mask);
-        } else {
-            transitioningStateFlags &= ~(1 << mask);
-        }
-        return transitioningStateFlags;
-    }
-
-    private boolean getTransitioningState(int mask) {
-        return 0 != (transitioningStateFlags & (1 << mask));
-    }
-
-    private void dispatchTransitionState(TransitioningContext.TransitionState state, TransitioningContext.Operation operation, ViewController from, ViewController to) {
+    private void dispatchTransitionState(BaseTransitioningContext.TransitionState state, Operation operation, ViewController from, ViewController to) {
         switch (state) {
             case fromViewWillDisappear:
             case toViewWillDisappear:
@@ -142,9 +155,9 @@ public class NavigationController extends ViewController {
                 if (!getTransitioningState(3)) {
                     setTransitioningState(3, true);
                     from._notifyViewDidDisappear();
-                    if (operation == TransitioningContext.Operation.push) {
+                    if (operation == Operation.PUSH) {
                         from.contentView.setVisibility(View.INVISIBLE);
-                    } else if (operation == TransitioningContext.Operation.pop) {
+                    } else if (operation == Operation.POP) {
                         containerView.removeView(from.contentView);
                         from.parent = null;
                         children.remove(from);
@@ -159,7 +172,7 @@ public class NavigationController extends ViewController {
                     visible = to;
                 }
                 break;
-            case transitionCancel:
+            case cancel:
                 popGestureTransitioning = null;
                 to.contentView.setVisibility(View.INVISIBLE);
                 to._notifyViewWillDisappear();
@@ -168,7 +181,7 @@ public class NavigationController extends ViewController {
                 from._notifyViewDidAppear();
                 resetTransitioningState();
                 break;
-            case transitionFinish:
+            case finish:
                 popGestureTransitioning = null;
                 resetTransitioningState();
                 break;
@@ -192,71 +205,50 @@ public class NavigationController extends ViewController {
     }
 
     private void dispatchContainerViewTouchEvent(MotionEvent event) {
-        if (children != null && children.size() > 1) {
+        if (popGestureEnabled && children != null && children.size() > 1) {
             ViewController to = children.get(children.size() - 2);
-            TransitioningContext context = new TransitioningContext(event, visible, visible.contentView, to, to.contentView, containerView);
+            PopGestureTransitionContext context = new PopGestureTransitionContext(event, visible, visible.contentView, to, to.contentView, containerView);
             if (popGestureTransitioning != null) {
                 context.setTransitionStateChangeListener((state) -> {
-                    dispatchTransitionState(state, TransitioningContext.Operation.pop, visible, to);
+                    dispatchTransitionState(state, Operation.POP, visible, to);
                 });
-                popGestureTransitioning.animateTransition(context);
+                popGestureTransitioning.transition(context);
             } else {
-                if (delegate != null) {
-                    if (delegate.shouldPopGestureTransition(this, visible, to)) {
-                        popGestureTransitioning = delegate.popGestureTransitioning(this, visible, to);
-                    }
+                if (navigationPopGestureTransitioning != null) {
+                    popGestureTransitioning = navigationPopGestureTransitioning.transitioning(this, visible, to);
+                } else {
+                    DefaultNavigationPopGestureTransitioning navigationPopGestureTransitioning = new DefaultNavigationPopGestureTransitioning();
+                    popGestureTransitioning = navigationPopGestureTransitioning.transitioning(this, visible, to);
                 }
-                if (popGestureTransitioning == null) {
-                    DefaultNavigationControllerDelegate delegate = new DefaultNavigationControllerDelegate();
-                    if (delegate.shouldPopGestureTransition(this, visible, to)) {
-                        popGestureTransitioning = delegate.popGestureTransitioning(this, visible, to);
-                    }
-                }
-                if (popGestureTransitioning != null) {
-                    context.setTransitionStateChangeListener((state) -> {
-                        dispatchTransitionState(state, TransitioningContext.Operation.pop, visible, to);
-                    });
-                    popGestureTransitioning.animateTransition(context);
-                }
+                context.setTransitionStateChangeListener((state) -> {
+                    dispatchTransitionState(state, Operation.POP, visible, to);
+                });
+                popGestureTransitioning.transition(context);
             }
         }
     }
 
-    private void showController(TransitioningContext.Operation operation, ViewController from, ViewController to) {
-        TransitioningContext context = new TransitioningContext(operation, from, from.contentView, to, to.contentView, containerView);
-        AnimatedTransitioning transition = null;
-        if (delegate != null) {
-            transition = delegate.transitioning(this, operation, from, to);
+    private void showController(Operation operation, ViewController from, ViewController to) {
+        AnimatedTransitionContext context = new AnimatedTransitionContext(operation, from, from.contentView, to, to.contentView, containerView);
+        AnimatedTransitioning transition;
+        if (navigationAnimatedTransitioning != null) {
+            transition = navigationAnimatedTransitioning.transitioning(this, operation, from, to);
+        } else {
+            DefaultNavigationAnimatedTransitioning animatedTransitioning = new DefaultNavigationAnimatedTransitioning();
+            transition = animatedTransitioning.transitioning(this, operation, from, to);
         }
-        if (transition == null) {
-            DefaultNavigationControllerDelegate delegate = new DefaultNavigationControllerDelegate();
-            transition = delegate.transitioning(this, operation, from, to);
-        }
-        if (transition != null) {
-            context.setTransitionStateChangeListener((state) -> {
-                dispatchTransitionState(state, operation, from, to);
-            });
-            transition.animateTransition(context);
-        }
+        context.setTransitionStateChangeListener((state -> {
+            dispatchTransitionState(state, operation, from, to);
+        }));
+        transition.animateTransition(context);
     }
 
-    private class DefaultNavigationControllerDelegate implements NavigationControllerDelegate {
+    private class DefaultNavigationAnimatedTransitioning implements NavigationAnimatedTransitioning {
 
         @Nullable
         @Override
-        public AnimatedTransitioning transitioning(NavigationController navigationController, TransitioningContext.Operation operation, ViewController from, ViewController to) {
+        public AnimatedTransitioning transitioning(NavigationController navigationController, Operation operation, ViewController from, ViewController to) {
             return new DefaultAnimateTransition();
-        }
-
-        @Override
-        public boolean shouldPopGestureTransition(NavigationController navigationController, ViewController from, ViewController to) {
-            return true;
-        }
-
-        @Nullable
-        @Override
-        public AnimatedTransitioning popGestureTransitioning(NavigationController navigationController, ViewController from, ViewController to) {
-            return new DefaultPopGestureTransition();
         }
 
         class DefaultAnimateTransition implements AnimatedTransitioning {
@@ -264,17 +256,17 @@ public class NavigationController extends ViewController {
             final String propertyName = "translationX";
 
             @Override
-            public void animateTransition(TransitioningContext context) {
-                if (context.getOperation() == TransitioningContext.Operation.push) {
+            public void animateTransition(AnimatedTransitionContext context) {
+                if (context.getOperation() == Operation.PUSH) {
                     push(context);
-                } else if (context.getOperation() == TransitioningContext.Operation.pop) {
+                } else if (context.getOperation() == Operation.POP) {
                     pop(context);
                 }
             }
 
-            private void push(TransitioningContext context) {
-                View fromView = context.getContentView(TransitioningContext.ViewKey.from);
-                View toView = context.getContentView(TransitioningContext.ViewKey.to);
+            private void push(AnimatedTransitionContext context) {
+                View fromView = context.getContentView(BaseTransitioningContext.ViewKey.FROM);
+                View toView = context.getContentView(BaseTransitioningContext.ViewKey.TO);
                 AnimatorSet animatorSet = new AnimatorSet();
                 animatorSet.setDuration(context.getDefaultTransitionDuration());
                 if (fromView != null) {
@@ -285,13 +277,13 @@ public class NavigationController extends ViewController {
                         @Override
                         public void onAnimationStart(Animator animation) {
                             super.onAnimationStart(animation);
-                            context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewWillDisappear);
                         }
 
                         @Override
                         public void onAnimationEnd(Animator animation) {
                             super.onAnimationEnd(animation);
-                            context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewDidDisappear);
                         }
                     });
                 }
@@ -302,23 +294,23 @@ public class NavigationController extends ViewController {
                         @Override
                         public void onAnimationStart(Animator animation) {
                             super.onAnimationStart(animation);
-                            context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewWillAppear);
                         }
 
                         @Override
                         public void onAnimationEnd(Animator animation) {
                             super.onAnimationEnd(animation);
-                            context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear);
-                            context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewDidAppear);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.finish);
                         }
                     });
                 }
                 animatorSet.start();
             }
 
-            private void pop(TransitioningContext context) {
-                View fromView = context.getContentView(TransitioningContext.ViewKey.from);
-                View toView = context.getContentView(TransitioningContext.ViewKey.to);
+            private void pop(AnimatedTransitionContext context) {
+                View fromView = context.getContentView(BaseTransitioningContext.ViewKey.FROM);
+                View toView = context.getContentView(BaseTransitioningContext.ViewKey.TO);
                 AnimatorSet animatorSet = new AnimatorSet();
                 animatorSet.setDuration(context.getDefaultTransitionDuration());
                 if (fromView != null) {
@@ -328,13 +320,13 @@ public class NavigationController extends ViewController {
                         @Override
                         public void onAnimationStart(Animator animation) {
                             super.onAnimationStart(animation);
-                            context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewWillDisappear);
                         }
 
                         @Override
                         public void onAnimationEnd(Animator animation) {
                             super.onAnimationEnd(animation);
-                            context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewDidDisappear);
                         }
                     });
                 }
@@ -345,22 +337,31 @@ public class NavigationController extends ViewController {
                         @Override
                         public void onAnimationStart(Animator animation) {
                             super.onAnimationStart(animation);
-                            context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewWillAppear);
                         }
 
                         @Override
                         public void onAnimationEnd(Animator animation) {
                             super.onAnimationEnd(animation);
-                            context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear);
-                            context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewDidAppear);
+                            context.updateTransitionState(BaseTransitioningContext.TransitionState.finish);
                         }
                     });
                 }
                 animatorSet.start();
             }
         }
+    }
 
-        class DefaultPopGestureTransition implements AnimatedTransitioning {
+    private class DefaultNavigationPopGestureTransitioning implements NavigationPopGestureTransitioning {
+
+        @Nullable
+        @Override
+        public PopGestureTransitioning transitioning(NavigationController navigationController, ViewController from, ViewController to) {
+            return new DefaultPopGestureTransition();
+        }
+
+        class DefaultPopGestureTransition implements PopGestureTransitioning {
 
             private float downX;
             private float disX;
@@ -369,9 +370,9 @@ public class NavigationController extends ViewController {
             private final int velocity = 1500;
 
             @Override
-            public void animateTransition(TransitioningContext context) {
-                View fromView = context.getContentView(TransitioningContext.ViewKey.from);
-                View toView = context.getContentView(TransitioningContext.ViewKey.to);
+            public void transition(PopGestureTransitionContext context) {
+                View fromView = context.getContentView(BaseTransitioningContext.ViewKey.FROM);
+                View toView = context.getContentView(BaseTransitioningContext.ViewKey.TO);
                 MotionEvent event = context.getEvent();
                 if (fromView != null && toView != null && event != null) {
                     final float initialX = context.getContainerView().getWidth() / 4;
@@ -399,15 +400,15 @@ public class NavigationController extends ViewController {
                 downX = event.getX();
             }
 
-            private void dispatchActionMove(MotionEvent event, View fromView, View toView, TransitioningContext context, float initialX) {
+            private void dispatchActionMove(MotionEvent event, View fromView, View toView, PopGestureTransitionContext context, float initialX) {
                 if (downX < down_max_x && velocityTracker != null) {
                     velocityTracker.addMovement(event);
                     velocityTracker.computeCurrentVelocity(velocity);
                     disX = event.getX() - downX;
                     if (disX >= 0) {
-                        context.updateTransitionState(TransitioningContext.TransitionState.fromViewWillDisappear);
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewWillDisappear);
                         fromView.setX(disX);
-                        context.updateTransitionState(TransitioningContext.TransitionState.toViewWillAppear);
+                        context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewWillAppear);
                         toView.setX(-initialX + initialX * (disX / toView.getWidth()));
                     } else {
                         disX = 0;
@@ -415,7 +416,7 @@ public class NavigationController extends ViewController {
                 }
             }
 
-            private void dispatchActionUpAndCancel(MotionEvent event, View fromView, View toView, TransitioningContext context, float initialX) {
+            private void dispatchActionUpAndCancel(MotionEvent event, View fromView, View toView, PopGestureTransitionContext context, float initialX) {
                 if (velocityTracker != null) {
                     if (downX != event.getX() && downX < down_max_x) {
                         String propertyName = "translationX";
@@ -427,7 +428,7 @@ public class NavigationController extends ViewController {
                                 @Override
                                 public void onAnimationEnd(Animator animation) {
                                     super.onAnimationEnd(animation);
-                                    context.updateTransitionState(TransitioningContext.TransitionState.fromViewDidDisappear);
+                                    context.updateTransitionState(BaseTransitioningContext.TransitionState.fromViewDidDisappear);
                                 }
                             });
                             ObjectAnimator toViewAnimator = ObjectAnimator.ofFloat(toView, propertyName, toView.getX(), 0);
@@ -435,8 +436,8 @@ public class NavigationController extends ViewController {
                                 @Override
                                 public void onAnimationEnd(Animator animation) {
                                     super.onAnimationEnd(animation);
-                                    context.updateTransitionState(TransitioningContext.TransitionState.toViewDidAppear);
-                                    context.updateTransitionState(TransitioningContext.TransitionState.transitionFinish);
+                                    context.updateTransitionState(BaseTransitioningContext.TransitionState.toViewDidAppear);
+                                    context.updateTransitionState(BaseTransitioningContext.TransitionState.finish);
                                 }
                             });
                             animatorSet.playTogether(fromViewAnimator);
@@ -448,7 +449,7 @@ public class NavigationController extends ViewController {
                                 @Override
                                 public void onAnimationEnd(Animator animation) {
                                     super.onAnimationEnd(animation);
-                                    context.updateTransitionState(TransitioningContext.TransitionState.transitionCancel);
+                                    context.updateTransitionState(BaseTransitioningContext.TransitionState.cancel);
                                 }
                             });
                             animatorSet.playTogether(fromViewAnimator);
