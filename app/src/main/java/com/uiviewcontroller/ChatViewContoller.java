@@ -13,8 +13,8 @@ public class ChatViewContoller extends UIViewController {
     }
 
     @Override
-    protected void viewWillAppear() {
-        super.viewWillAppear();
+    protected void loadView() {
+        super.loadView();
     }
 
     @Override
@@ -29,5 +29,25 @@ public class ChatViewContoller extends UIViewController {
                 getNavigationController().pushViewController(new TestViewController(getContext()));
             }
         });
+    }
+
+    @Override
+    protected void viewWillAppear() {
+        super.viewWillAppear();
+    }
+
+    @Override
+    protected void viewDidAppear() {
+        super.viewDidAppear();
+    }
+
+    @Override
+    protected void viewWillDisappear() {
+        super.viewWillDisappear();
+    }
+
+    @Override
+    protected void viewDidDisappear() {
+        super.viewDidDisappear();
     }
 }

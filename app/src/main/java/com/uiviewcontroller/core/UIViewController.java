@@ -8,11 +8,11 @@ import java.util.List;
 
 public class UIViewController {
 
-    private UIView view;
     private Context context;
     private UITabBarItem tabBarItem;
     private List<UIViewController> childViewControllers;
     private UIViewController parentViewController;
+    protected UIView view;
     protected UIViewControllerPrivate _priv;
 
     public UIViewController(Context context) {
@@ -38,9 +38,7 @@ public class UIViewController {
     }
 
     protected void loadView() {
-        if (view == null) {
-            view = new UIView(context);
-        }
+
     }
 
     protected boolean shouldAutomaticallyForwardAppearanceMethods() {
@@ -125,6 +123,9 @@ public class UIViewController {
     public UIView getView() {
         if (!isViewLoaded()) {
             loadView();
+            if (view == null) {
+                view = new UIView(context);
+            }
             viewDidLoad();
         }
         return view;

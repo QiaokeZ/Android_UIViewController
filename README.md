@@ -81,4 +81,50 @@ public class MainActivity extends AppCompatActivity {
     }
 }
 
+public class ChatViewContoller extends UIViewController {
+
+    public ChatViewContoller(Context context) {
+        super(context);
+    }
+
+    @Override
+    protected void loadView() {
+        super.loadView();
+    }
+
+    @Override
+    protected void viewDidLoad() {
+        super.viewDidLoad();
+        View rootView = LayoutInflater.from(getContext()).inflate(R.layout.viewcontroller_chat, null);
+        getView().addView(rootView);
+
+        rootView.findViewById(R.id.btn_next).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                getNavigationController().pushViewController(new TestViewController(getContext()));
+            }
+        });
+    }
+
+    @Override
+    protected void viewWillAppear() {
+        super.viewWillAppear();
+    }
+
+    @Override
+    protected void viewDidAppear() {
+        super.viewDidAppear();
+    }
+
+    @Override
+    protected void viewWillDisappear() {
+        super.viewWillDisappear();
+    }
+
+    @Override
+    protected void viewDidDisappear() {
+        super.viewDidDisappear();
+    }
+}
+
 ```
