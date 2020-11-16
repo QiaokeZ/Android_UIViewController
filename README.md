@@ -19,6 +19,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void prepareView() {
 
+        //分栏控制器
         UITabBarController tabBarController = new UITabBarController(this);
 
         //微信
@@ -41,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
         configViewController(mineViewController, "我的", R.drawable.ic_person_24, R.drawable.ic_person_selected_24);
         tabBarController.addChildViewController(mineViewController);
 
+        //导航控制器
         navigationController = new UINavigationController(this, tabBarController);
         setContentView(navigationController.createView());
     }
@@ -81,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
     }
 }
 
+//微信控制器
 public class ChatViewContoller extends UIViewController {
 
     public ChatViewContoller(Context context) {
